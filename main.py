@@ -34,12 +34,13 @@ async def send_start_message(chat_id: int, context: CallbackContext) -> None:
     keyboard = [
         [InlineKeyboardButton("Hotel Info", callback_data='hotel-info')],
         [InlineKeyboardButton("Group Info", callback_data='group-info')],
-        [InlineKeyboardButton("Today's Menu", callback_data='menu')],
+        [InlineKeyboardButton("Transportation Info", callback_data='transportation-info')],
         [InlineKeyboardButton("Flowmaps", callback_data='flowmaps')],
         [InlineKeyboardButton("Point of Contact", callback_data='poc')],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await context.bot.send_message(chat_id=chat_id, text='What would you like to know?', reply_markup=reply_markup)
+
 
 async def send_welcome_message(update: Update, context: CallbackContext) -> None:
     user_first_name = update.message.from_user.first_name
@@ -78,6 +79,8 @@ async def button(update: Update, context: CallbackContext) -> None:
     user_first_name = query.from_user.first_name
     user_id = query.from_user.id
     data = check_existing(user_id)
+    if not data or len(data) == 1:
+        return await query.message.reply_text(f'You are not logged in. Please login with /start')
     bkid = data[0] if data else None
 
     menuButton = True
@@ -100,19 +103,19 @@ async def button(update: Update, context: CallbackContext) -> None:
         else:
             logger.error('Image file not found.')
 
-    elif query.data == 'menu':
-        await query.message.reply_text("Today's Menu is: ...")
+    elif query.data == 'transportation-info':
+        await query.message.reply_text("Transportation info: ...")
     elif query.data == 'flowmaps':
         await query.message.reply_text("Flowmaps")
     elif query.data == 'poc':
         message = """
 *Medical Emergencies*:
     Primary Contact: Shitalben Patel, RN
-    Phone Number: \(404\) 944\-0260
+    Phone Number: \\(404\\) 944\\-0260
 
-*Non\-Medical Emergencies*
+*Non\\-Medical Emergencies*
 Questions about hotel, transportation, or if you need directions, etc:
-    Shibir Hotline: \(943\) 300\-7012
+    Shibir Hotline: \\(943\\) 300\\-7012
         """
         await query.message.reply_text(message, parse_mode='MarkdownV2')
     elif any(month["name"] == query.data for month in MONTHS):
@@ -183,7 +186,7 @@ async def enter_birthday(month, day, update: Update, context: CallbackContext) -
     user_id = update.from_user.id
 
     if birthday == '1':  # Example condition
-        await update.message.edit_text(f'Birthday entered successfully')
+        await update.message.edit_text(f'Please enter the birthday associated with your BKMS account')
         updated_rows = []
         with open('Data/loginids.csv', mode='r', newline='') as file:
             reader = csv.reader(file)
@@ -216,8 +219,30 @@ def check_existing(user_id):
                 return row
     return None
 
-async def help_command(update: Update, context: CallbackContext) -> None:
-    await update.message.reply_text('Help!')
+async def change_id(update: Update, context: CallbackContext) -> None:
+    user_id = update.message.from_user.id
+    found = False
+
+    # Read the CSV file and filter out the entry with the matching user_id
+    with open('Data/loginids.csv', mode='r') as file:
+        reader = csv.reader(file)
+        rows = [row for row in reader if not (len(row) > 1 and row[1] == str(user_id))]
+
+    # Check if the user_id was found and removed
+    if len(rows) < sum(1 for row in csv.reader(open('Data/loginids.csv'))):
+        found = True
+
+    # Write the remaining rows back to the CSV file
+    with open('Data/loginids.csv', mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerows(rows)
+
+    if found:
+        await update.message.reply_text('Logged out of your BKMS. Run /start to login with another id')
+    else:
+        await update.message.reply_text('No entry found for your ID.')
+    
+
 
 def main() -> None:
     application = Application.builder().token(TOKEN).build()
@@ -241,7 +266,7 @@ def main() -> None:
         fallbacks=[]
     )
 
-    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("change_id", change_id))
     application.add_handler(conv_handler)
     application.add_handler(button_handler)
 
