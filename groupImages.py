@@ -1,94 +1,69 @@
 from PIL import Image, ImageDraw, ImageFont
 import tempfile
-import os
 
-def createGroupImage(bkid):
-    # Define the text and font
+def createGroupImage(members, bal, groupName, groupLead):
+    print(members, bal, groupName, groupLead)
+
+    # Define the font and color
     def textOnImage(text, y, font_size=35, font_path='Assets/MORESUGAR-REGULAR.TTF', font_color='black'):
         font = ImageFont.truetype(font_path, font_size)
-        # Calculate the size of the text to be added using textbbox
         text_bbox = draw.textbbox((0, 0), text, font=font)
         text_width = text_bbox[2] - text_bbox[0]
         text_height = text_bbox[3] - text_bbox[1]
+        image_width, _ = image.size
+        text_position = ((image_width - text_width) // 2, y + 10)
 
-        # Calculate the position to center the text
-        image_width, image_height = image.size
-        text_position = ((image_width - text_width) // 2, y+10)
-        # Define the text color
-        if font_color == 'black':
-            text_color = (0, 0, 0)  # White color in RGB
-        elif font_color == 'white':
-            text_color = (255, 255, 255)
-        elif font_color == 'tan':
-            text_color = (229, 246, 209)
+        color_map = {
+            'black': (0, 0, 0),
+            'white': (255, 255, 255),
+            'tan': (229, 246, 209)
+        }
+        text_color = color_map.get(font_color, (0, 0, 0))  # Default to black if color is not found
 
-        # Add text to the image
         draw.text(text_position, text, font=font, fill=text_color)
 
+    # Map (number of members, bal) to template path
+    template_map = {
+        (8, True): 'Assets/Bal7members.png',
+        (8, False): 'Assets/Kishore7members.png',
+        (9, True): 'Assets/Bal8members.png',
+        (9, False): 'Assets/Kishore8members.png',
+        (10, True): 'Assets/Bal9members.png',
+        (10, False): 'Assets/Kishore9members.png'
+    }
 
-    members = 7
-    bal = True
-    
-    if members == 7 and bal == True:
-        template_path = 'Assets/Bal7members.png'
-    elif members == 7 and bal == False:
-        template_path = 'Assets/Kishore7members.png'
-    elif members == 8 and bal == True:
-        template_path = 'Assets/Bal8members.png'
-    elif members == 8 and bal == False:
-        template_path = 'Assets/Kishore8members.png'
-    elif members == 9 and bal == True:
-        template_path = 'Assets/Bal9members.png'
-    elif members == 9 and bal == False:
-        template_path = 'Assets/Kishore9members.png'
+    # Get the template path based on the number of members and bal status
+    template_path = template_map.get((len(members), bal))
+    if not template_path:
+        raise ValueError("No template found for the given number of members and bal status")
 
-    
+    # Open the template image
     image = Image.open(template_path)
-
-    # Create a draw object
     draw = ImageDraw.Draw(image)
 
+    # Define y positions based on the number of members
+    y_positions = {
+        8: [230, 438, 526, 612, 703, 790, 880, 960],
+        9: [225, 414, 494, 572, 652, 730, 810, 888, 968],
+        10: [200, 380, 455, 528, 602, 678, 750, 827, 903, 983]
+    }
 
-    
-    # textOnImage("Jaibhai Atlanta", 230)
-    # textOnImage("Jaibhai Atlanta", 438)
-    # textOnImage("Jaibhai Atlanta", 526)
-    # textOnImage("Jaibhai Atlanta", 612)
-    # textOnImage("Jaibhai Atlanta", 703)
-    # textOnImage("Jaibhai Atlanta", 790)
-    # textOnImage("Jaibhai Atlanta", 880)
-    # textOnImage("Jaibhai Atlanta", 967)
+    # Add the group name
+    textOnImage(groupName, 10, font_size=65, font_path='Assets/CORESANS.OTF', font_color='tan')
 
+    # Check if the group lead is in the members and update positions accordingly
+    if groupLead in members:
+        members.remove(groupLead)
+        members.insert(0, groupLead)  # Move the group lead to the front
 
+    # Add member names
+    for i, member in enumerate(members):
+        if i < len(y_positions[len(members)]):  # Ensure we do not go out of bounds
+            textOnImage(member, y_positions[len(members)][i])
 
-    # textOnImage("Jaibhai", 225)
-    # textOnImage("Sahilbhai", 414)
-    # textOnImage("Haribhai", 494)
-    # textOnImage("Dharikbhai", 572)
-    # textOnImage("Nilaybhai", 652)
-    # textOnImage("Nischaybhai", 730)
-    # textOnImage("Aksharbhai", 810)
-    # textOnImage("Gnanbhai Atlanta", 888)
-    # textOnImage("Jaibhai Tampa", 966)
-
-    # textOnImage("Dharma dwellers", 10, font_size=65, font_path='Assets/CORESANS.OTF', font_color='tan')
-    # textOnImage("Jaibhai Atlanta", 200)
-    # textOnImage("Jaibhai Atlanta", 380)
-    # textOnImage("Jaibhai Atlanta", 455)
-    # textOnImage("Jaibhai Atlanta", 528)
-    # textOnImage("Jaibhai Atlanta", 602)
-    # textOnImage("Jaibhai Atlanta", 678)
-    # textOnImage("Jaibhai Atlanta", 750)
-    # textOnImage("Jaibhai Atlanta", 827)
-    # textOnImage("Jaibhai Atlanta", 903)
-    # textOnImage("Jaibhai Atlanta", 976)
-
-
-    # Create a temporary file to save the edited image
+    # Save the edited image to a temporary file
     with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
         temp_filename = temp_file.name
-
-        # Save the edited image to the temporary file
         image.save(temp_filename)
 
     return temp_filename

@@ -7,6 +7,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from tokens import TOKEN
 from groupImages import createGroupImage
+import pandas as pd
 
 # Enable logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -30,6 +31,60 @@ MONTHS = [
     {"name": "December", "days": list(range(1, 32))}
 ]
 
+HOTEL_INFORMATION = {
+    'Sonesta Gwinnett Place': '1775 Pleasant Hill Rd, Duluth, GA 30096',
+    'Best Western Gwinnett': '3670 Shackleford Rd, Duluth, GA 30096',
+    'Hampton Inn & Suites': '1725 Pineland Rd Duluth GA 30096'
+}
+
+# Read the Excel file
+file_path = 'Data/FullData.csv'
+df = pd.read_csv(file_path)
+
+# Convert non-numeric values to NaN and drop rows with NaN in 'User ID'
+df['User ID'] = pd.to_numeric(df['User ID'], errors='coerce')  # Convert to numeric, invalid parsing will be set as NaN
+df = df.dropna(subset=['User ID'])  # Drop rows where 'User ID' is NaN
+df['User ID'] = df['User ID'].astype(int)  # Convert the cleaned 'User ID' column to integer
+
+# Convert columns to lists
+bkids = df['User ID'].astype(str).tolist()
+
+
+def get_user_data(user_id):
+    try:
+        user_id = int(user_id)
+    except ValueError:
+        return None  # Return None if user_id is not an integer
+
+    # Retrieve data for the specified user_id
+    user_data = df.loc[df["User ID"] == user_id]
+
+    if not user_data.empty:
+        # Convert the row of user data to a dictionary
+        data = user_data.iloc[0].to_dict()
+
+        # Format birthday if present
+        formatted_birthday = data.get("Birthdates", "")
+        if formatted_birthday:
+            month, day = formatted_birthday.split('/')[0:2]
+            data["FormattedBirthday"] = f"{month.zfill(2)}/{day.zfill(2)}"  # Ensure month and day are two digits
+
+        return {
+            'User ID': data.get('User ID'),
+            'Name': data.get('Name'),
+            'Center': data.get('Center'),
+            'Registered for Bal Shibir': data.get('Registered for Bal Shibir'),
+            'Registered for Kishore Shibir': data.get('Registered for Kishore Shibir'),
+            'Group Name': data.get('Group Name'),
+            'Bal Group Lead': data.get('Bal Group Lead'),
+            'Kishore Group Lead': data.get('Kishore Group Lead'),
+            'Birthdates': formatted_birthday,
+            'FormattedBirthday': data.get('FormattedBirthday'),
+            'Kishore Hotel Name': data.get('Kishore Hotel Name'),
+            'Bal Hotel Name': data.get('Bal Hotel Name')
+        }
+    return None
+
 async def send_start_message(chat_id: int, context: CallbackContext) -> None:
     keyboard = [
         [InlineKeyboardButton("Hotel Info", callback_data='hotel-info')],
@@ -49,7 +104,7 @@ async def send_welcome_message(update: Update, context: CallbackContext) -> None
         'Being your first shibir, I will be here to assist you. You will have a blast.'
     )
 
-    image_path = 'Assets/SS24Bot.jpg'
+    image_path = 'Assets/splashlogo.png'
     if os.path.exists(image_path):
         with open(image_path, 'rb') as photo:
             await context.bot.send_photo(
@@ -83,25 +138,58 @@ async def button(update: Update, context: CallbackContext) -> None:
         return await query.message.reply_text(f'You are not logged in. Please login with /start')
     bkid = data[0] if data else None
 
+    userdata = get_user_data(bkid)
+    name = userdata['Name']
+    name = name.split(' ', 1)[0]
+
     menuButton = True
     global selected_month
 
-
     if query.data == 'hotel-info':
-        await query.message.reply_text(f'Hotel information for {user_first_name}bhai')
+        await query.message.reply_text(f'Hotel information for {name}bhai')
 
     elif query.data == 'group-info':
-        file_path = createGroupImage(bkid)
-        group_message = f'Group information for {user_first_name}bhai'
-        if os.path.exists(file_path):
-            with open(file_path, 'rb') as photo:
-                await context.bot.send_photo(
-                    chat_id=query.message.chat_id,
-                    photo=photo,
-                    caption=group_message
-                )
+        groupName = userdata['Group Name']
+        print(groupName, groupName)
+        if not type(groupName) == str:
+            return await query.message.reply_text('You are not in a group!')
+        
+        print('passed')
+        
+        if data[3] == 'bal-shibir':
+            bal = True
         else:
-            logger.error('Image file not found.')
+            bal = False
+
+        names = []
+
+        with open("Data/FullData.csv", mode='r', newline='') as file:
+            reader = csv.reader(file)
+            header = next(reader)  # Skip the header row if present
+
+            groupLead = None
+
+            for row in reader:
+                # Ensure the row is long enough
+                if row[5] == groupName:
+                    # Assuming User ID is in column_index 0
+                    if row[6] == 'Yes' and bal == True:
+                        groupLead = row[1]
+                    elif row[7] == 'Yes' and bal == False:
+                        groupLead = row[1]
+                    names.append(row[1])  # Adjust the index if User ID is in a different column
+
+            file_path = createGroupImage(names, bal, groupName, groupLead)
+            group_message = f'Group information for {name}bhai'
+            if os.path.exists(file_path):
+                with open(file_path, 'rb') as photo:
+                    await context.bot.send_photo(
+                        chat_id=query.message.chat_id,
+                        photo=photo,
+                        caption=group_message
+                    )
+            else:
+                logger.error('Image file not found.')
 
     elif query.data == 'transportation-info':
         await query.message.reply_text("Transportation info: ...")
@@ -118,6 +206,13 @@ Questions about hotel, transportation, or if you need directions, etc:
     Shibir Hotline: \\(943\\) 300\\-7012
         """
         await query.message.reply_text(message, parse_mode='MarkdownV2')
+    elif query.data == 'bal-shibir':
+        await bal_shibir_update(bkid)
+        await query.message.reply_text('You will now get information for bal shibir')
+    elif query.data == 'kishore-shibir':
+        await kishore_shibir_update(bkid)
+        await query.message.reply_text('You will now get information for kishore shibir')
+
     elif any(month["name"] == query.data for month in MONTHS):
         selected_month = next((month for month in MONTHS if month["name"] == query.data), None)
         if selected_month:
@@ -168,12 +263,27 @@ async def enter_bkms_id(update: Update, context: CallbackContext) -> int:
     bkms_id = update.message.text
     user_id = update.message.from_user.id
 
-    if bkms_id == '1':  # Example condition
-        await update.message.reply_text(f'BKMS ID found successfully for {update.message.from_user.first_name}bhai')
-        with open('Data/loginids.csv', mode='a', newline='') as file:
+    data = get_user_data(bkms_id)
+    name = data['Name']
+    name = name.split(' ', 1)[0]
+
+    if bkms_id in bkids:  # Example condition
+        await update.message.reply_text(f'BKMS ID found successfully for {name}bhai')
+        updated_rows = []
+        with open('Data/loginids.csv', mode='r', newline='') as file:
+            reader = csv.reader(file)
+            for row in reader:
+                if row and len(row) >= 1:
+                    storedbkms = row[0]
+                    if storedbkms == bkms_id:
+                        row[1] = user_id
+                        print('working')
+                updated_rows.append(row)
+
+        with open('Data/loginids.csv', mode='w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow([bkms_id, user_id])
-            await birthday_buttons(update)
+            writer.writerows(updated_rows)
+        await birthday_buttons(update)
     else:
         await update.message.reply_text("BKMS ID not found. Please try again or contact your Group Lead/PC for assistance")
         return ENTER_BKMS_ID
@@ -181,22 +291,42 @@ async def enter_bkms_id(update: Update, context: CallbackContext) -> int:
     return ConversationHandler.END
 
 async def enter_birthday(month, day, update: Update, context: CallbackContext) -> int:
-    print(month, day)
-    birthday = '1'
+    MONTHS = {
+        'January': '01', 'February': '02', 'March': '03', 'April': '04', 'May': '05', 'June': '06',
+        'July': '07', 'August': '08', 'September': '09', 'October': '10', 'November': '11', 'December': '12'
+    }
+
+    # Normalize month and day
+    month_name = MONTHS.get(month, 'Unknown')
+    month_number = month_name.zfill(2)
+    day_number = day.zfill(2)
+
+    # Construct the formatted birthday
+    birthday = f"{month_number}/{day_number}"
+
     user_id = update.from_user.id
 
-    if birthday == '1':  # Example condition
-        await update.message.edit_text(f'Please enter the birthday associated with your BKMS account')
+    data = check_existing(user_id)
+    bkid = data[0]
+
+    data = get_user_data(bkid)
+    systemBirthday = data['FormattedBirthday']
+    if systemBirthday is None:
+        await update.message.edit_text('No birthday found for your account.')
+        return ConversationHandler.END
+
+    print(systemBirthday, birthday)
+
+    if systemBirthday == birthday:
+        await update.message.edit_text('Birthday entered correctly!')
         updated_rows = []
         with open('Data/loginids.csv', mode='r', newline='') as file:
             reader = csv.reader(file)
             for row in reader:
                 if row and len(row) >= 2:
                     stored_user_id = row[1]
-                    print(stored_user_id, user_id)
                     if stored_user_id == str(user_id):
-                        print('matching')
-                        row.append(birthday)
+                        row[2] = birthday
                 updated_rows.append(row)
 
         with open('Data/loginids.csv', mode='w', newline='') as file:
@@ -204,9 +334,44 @@ async def enter_birthday(month, day, update: Update, context: CallbackContext) -
             writer.writerows(updated_rows)
         
         await asyncio.sleep(1)
-        await send_start_message(update.message.chat_id, context)
+
+        dataCheck = check_existing(user_id)
+        if len(dataCheck) == 4:
+            return await send_start_message(update.message.chat_id, context)
+
+        if data['Registered for Bal Shibir'] == "Yes" and data['Registered for Kishore Shibir'] == 'Yes':
+            keyboard = [
+            [InlineKeyboardButton("Bal Shibir", callback_data='bal-shibir')],
+            [InlineKeyboardButton("Kishore Shibir", callback_data='kishore-shibir')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(text='You are registered for both bal and kishore shibir. Which shibir do you want information for?', reply_markup=reply_markup)
+        elif data['Registered for Bal Shibir'] == 'Yes':
+            updated_rows = []
+            with open('Data/loginids.csv', mode='r', newline='') as file:
+                reader = csv.reader(file)
+                for row in reader:
+                    if row and len(row) >= 1:
+                        storedbkms = row[0]
+                        if storedbkms == bkid:
+                            row[3] = 'kishore-shibir'
+                            print('working')
+                    updated_rows.append(row)
+
+            with open('Data/loginids.csv', mode='w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerows(updated_rows)
+                await update.message.reply_text(text='Jai Swaminarayan, you are registered for bal shibir. Please use the menu below to get information for it.')
+                await bal_shibir_update(bkid)
+                await send_start_message(update.message.chat_id, context)
+        elif data['Registered for Kishore Shibir'] == 'Yes':
+            await update.message.reply_text(text='Jai Swaminarayan, you are registered for kishore shibir. Please use the menu below to get information for it.')
+            await kishore_shibir_update(bkid)
+            await send_start_message(update.message.chat_id, context)
+        else:
+            await update.message.reply_text(text='You are not registered for either bal or kishore shibir. Thank you for using this bot!')
     else:
-        await update.message.edit_text("Birthday is incorrect. Please try again or contact Group Lead/PC for assistance.")
+        await update.message.edit_text('Please enter the birthday associated with your BKMS account')
 
     return ConversationHandler.END
 
@@ -214,34 +379,113 @@ def check_existing(user_id):
     with open('Data/loginids.csv', mode='r') as file:
         reader = csv.reader(file)
         for row in reader:
-            stored_user_id = row[1]
-            if stored_user_id == str(user_id):
-                return row
+            if len(row) > 1:  # Check if the row has at least 2 elements
+                stored_user_id = row[1]
+                if stored_user_id == str(user_id):
+                    return row
     return None
+
 
 async def change_id(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     found = False
-
-    # Read the CSV file and filter out the entry with the matching user_id
-    with open('Data/loginids.csv', mode='r') as file:
+    updated_rows = []
+    
+    # Read the CSV file and process each row
+    with open('Data/loginids.csv', mode='r', newline='') as file:
         reader = csv.reader(file)
-        rows = [row for row in reader if not (len(row) > 1 and row[1] == str(user_id))]
+        for row in reader:
+            if len(row) > 1 and row[1] == str(user_id):
+                # If this row contains the user_id, modify the row
+                row[1] = ''  # Clear the user_id field
+                row[2] = ''  # Clear the birthday field
+                found = True
+            updated_rows.append(row)
 
-    # Check if the user_id was found and removed
-    if len(rows) < sum(1 for row in csv.reader(open('Data/loginids.csv'))):
-        found = True
-
-    # Write the remaining rows back to the CSV file
+    # Write the updated rows back to the CSV file
     with open('Data/loginids.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerows(rows)
+        writer.writerows(updated_rows)
 
     if found:
         await update.message.reply_text('Logged out of your BKMS. Run /start to login with another id')
     else:
-        await update.message.reply_text('No entry found for your ID.')
+        await update.message.reply_text('Could not find ID. Please login using /start first.')
     
+async def change_shibir(update: Update, context: CallbackContext) -> None:
+    user_id = update.message.from_user.id
+    updated_rows = []
+    found = False
+
+    with open('Data/loginids.csv', mode='r', newline='') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            if row and len(row) > 1 and row[1] == str(user_id):
+                found = True
+                data = check_existing(user_id)
+                bkid = data[0]
+                moreData = get_user_data(bkid)
+
+                if moreData['Registered for Bal Shibir'] == 'Yes' and moreData['Registered for Kishore Shibir'] == 'Yes':
+                    if len(row) > 3:
+                        if row[3] == 'bal-shibir':
+                            row[3] = 'kishore-shibir'
+                            await update.message.reply_text('You will now get information for Kishore Shibir')
+                        elif row[3] == 'kishore-shibir':
+                            row[3] = 'bal-shibir'
+                            await update.message.reply_text('You will now get information for Bal Shibir')
+                        else:
+                            row[3] = 'kishore-shibir'
+                            await update.message.reply_text('You will now get information for Kishore Shibir')
+                    else:
+                        # Handle case where the row does not have enough columns
+                        row[3] = 'kishore-shibir'  # Default value if index 3 is not present
+                        await update.message.reply_text('You will now get information for Kishore Shibir')
+                else:
+                    if moreData['Registered for Bal Shibir'] == 'Yes':
+                        await update.message.reply_text('You are only registered for Bal Shibir!')
+                    elif moreData['Registered for Kishore Shibir'] == 'Yes':
+                        await update.message.reply_text('You are only registered for Kishore Shibir!')
+            updated_rows.append(row)
+    
+    if found:
+        with open('Data/loginids.csv', mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerows(updated_rows)
+    else:
+        await update.message.reply_text('User ID not found. Please login using /start first')
+
+    
+
+async def bal_shibir_update(bkid):
+    updated_rows = []
+    with open('Data/loginids.csv', mode='r', newline='') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            if row and len(row) >= 1:
+                storedbkms = row[0]
+                if storedbkms == bkid:
+                    row[3] = 'bal-shibir'
+            updated_rows.append(row)
+
+    with open('Data/loginids.csv', mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerows(updated_rows)
+
+async def kishore_shibir_update(bkid):
+    updated_rows = []
+    with open('Data/loginids.csv', mode='r', newline='') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            if row and len(row) >= 1:
+                storedbkms = row[0]
+                if storedbkms == bkid:
+                    row[3] = 'kishore-shibir'
+            updated_rows.append(row)
+
+    with open('Data/loginids.csv', mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerows(updated_rows)
 
 
 def main() -> None:
@@ -267,6 +511,7 @@ def main() -> None:
     )
 
     application.add_handler(CommandHandler("change_id", change_id))
+    application.add_handler(CommandHandler("change_shibir", change_shibir))
     application.add_handler(conv_handler)
     application.add_handler(button_handler)
 
