@@ -103,8 +103,7 @@ async def send_start_message(chat_id: int, context: CallbackContext) -> None:
 async def send_welcome_message(update: Update, context: CallbackContext) -> None:
     user_first_name = update.message.from_user.first_name
     welcome_message = (
-        f'Jai Swaminarayan {user_first_name}bhai, welcome to your Summer Shibir 2024. '
-        'Being your first shibir, I will be here to assist you. You will have a blast.'
+        f'Jai Swaminarayan {user_first_name}bhai, welcome to Summer Shibir 2024! We are thrilled to have you join us for this exciting event. Throughout the shibir, you will have the opportunity to connect with fellow participants, engage in various activities, and deepen your understanding of our values and traditions. To make your experience as seamless as possible, I will be here to assist you every step of the way. Get ready for an amazing journey filled with learning, fun, and SAMP.'
     )
 
     image_path = 'Assets/splashlogo.png'
@@ -158,6 +157,10 @@ async def button(update: Update, context: CallbackContext) -> None:
             hotel = userdata['Kishore Hotel Name']
         else:
             await query.message.reply("Could not get information")
+            return ConversationHandler.END
+        
+        if not hotel or hotel == '':
+            await query.message.reply('An error occured')
             return ConversationHandler.END
 
         address = HOTEL_INFORMATION.get(hotel)
@@ -234,6 +237,7 @@ async def button(update: Update, context: CallbackContext) -> None:
                 with open(image_path, 'rb') as photo:
                     await context.bot.send_photo(
                         chat_id=query.message.chat_id,
+                        caption = f"Today's schedule",
                         photo=photo,
                     )
             else:
@@ -319,6 +323,7 @@ async def enter_bkms_id(update: Update, context: CallbackContext) -> int:
 
     if bkms_id in bkids:  # Example condition
         await update.message.reply_text(f'BKMS ID found successfully for {name}bhai')
+        await asyncio.sleep(1)
         updated_rows = []
         with open('Data/loginids.csv', mode='r', newline='') as file:
             reader = csv.reader(file)
@@ -386,10 +391,12 @@ async def enter_birthday(month, day, update: Update, context: CallbackContext) -
         await asyncio.sleep(1)
 
         dataCheck = check_existing(user_id)
-        if len(dataCheck) == 4:
+        print(dataCheck)
+        if not dataCheck[3] == '':
             return await send_start_message(update.message.chat_id, context)
 
         if data['Registered for Bal Shibir'] == "Yes" and data['Registered for Kishore Shibir'] == 'Yes':
+            print('registered for both')
             keyboard = [
             [InlineKeyboardButton("Bal Shibir", callback_data='bal-shibir')],
             [InlineKeyboardButton("Kishore Shibir", callback_data='kishore-shibir')]
@@ -449,6 +456,7 @@ async def change_id(update: Update, context: CallbackContext) -> None:
                 # If this row contains the user_id, modify the row
                 row[1] = ''  # Clear the user_id field
                 row[2] = ''  # Clear the birthday field
+                row[3] = '' # Clear the shibir field
                 found = True
             updated_rows.append(row)
 
