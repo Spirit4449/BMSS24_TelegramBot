@@ -250,12 +250,12 @@ async def button(update: Update, context: CallbackContext) -> None:
     elif query.data == 'poc':
         message = """
 *Medical Emergencies*:
-    Primary Contact: Shitalben Patel, RN
-    Phone Number: \\(404\\) 944\\-0260
+Primary Contact: Shitalben Patel, RN
+Phone Number: \\(404\\) 944\\-0260
 
-*Non\\-Medical Emergencies*
+*Non\\-Medical Emergencies:*
 Questions about hotel, transportation, or if you need directions, etc:
-    Shibir Hotline: \\(943\\) 300\\-7012
+Shibir Hotline: \\(943\\) 300\\-7012
         """
         await query.message.reply_text(message, parse_mode='MarkdownV2')
     elif query.data == 'bal-shibir':
