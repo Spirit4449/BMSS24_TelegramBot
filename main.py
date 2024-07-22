@@ -204,7 +204,7 @@ async def button(update: Update, context: CallbackContext) -> None:
                         groupLead = row[1]
                     elif row[7] == 'Yes' and bal == False:
                         groupLead = row[1]
-                    names.append(row[1])  # Adjust the index if User ID is in a different column
+                    names.append(f'{row[1]}, {row[2]}')  # Adjust the index if User ID is in a different column
 
             file_path = createGroupImage(names, bal, groupName, groupLead)
             group_message = f'Group information for {name}bhai'
