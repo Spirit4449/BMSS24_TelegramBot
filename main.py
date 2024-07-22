@@ -4,10 +4,10 @@ import asyncio
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler, ConversationHandler
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from tokens import TOKEN
 from groupImages import createGroupImage
 import pandas as pd
+from datetime import datetime, timedelta
 
 # Enable logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 # Define states for the conversation handler
 ENTER_BKMS_ID = 1
+
+EVENT_START_DATE = datetime(2024, 7, 22)
 
 MONTHS = [
     {"name": "January", "days": list(range(1, 32))},
@@ -89,8 +91,9 @@ async def send_start_message(chat_id: int, context: CallbackContext) -> None:
     keyboard = [
         [InlineKeyboardButton("Hotel Info", callback_data='hotel-info')],
         [InlineKeyboardButton("Group Info", callback_data='group-info')],
-        [InlineKeyboardButton("Transportation Info", callback_data='transportation-info')],
-        [InlineKeyboardButton("Flowmaps", callback_data='flowmaps')],
+        #[InlineKeyboardButton("Transportation Info", callback_data='transportation-info')],
+        [InlineKeyboardButton("Schedule", callback_data='schedule')],
+        #[InlineKeyboardButton("Flowmaps", callback_data='flowmaps')],
         [InlineKeyboardButton("Point of Contact", callback_data='poc')],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -131,11 +134,14 @@ async def button(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
 
+    print('button')
+
     user_first_name = query.from_user.first_name
     user_id = query.from_user.id
     data = check_existing(user_id)
     if not data or len(data) == 1:
-        return await query.message.reply_text(f'You are not logged in. Please login with /start')
+        await query.message.reply_text(f'You are not logged in. Please login with /start')
+        return ConversationHandler.END
     bkid = data[0] if data else None
 
     userdata = get_user_data(bkid)
@@ -146,13 +152,25 @@ async def button(update: Update, context: CallbackContext) -> None:
     global selected_month
 
     if query.data == 'hotel-info':
-        await query.message.reply_text(f'Hotel information for {name}bhai')
+        if data[3] == 'bal-shibir':
+            hotel = userdata['Bal Hotel Name']
+        elif data[3] == 'kishore-shibir':
+            hotel = userdata['Kishore Hotel Name']
+        else:
+            await query.message.reply("Could not get information")
+            return ConversationHandler.END
 
+        address = HOTEL_INFORMATION.get(hotel)
+        await query.message.reply_text(f"""
+*Hotel Name:* {hotel}
+*Hotel Address:* {address}
+""", parse_mode='MarkdownV2')
     elif query.data == 'group-info':
         groupName = userdata['Group Name']
         print(groupName, groupName)
         if not type(groupName) == str:
-            return await query.message.reply_text('You are not in a group!')
+            await query.message.reply_text('You are not in a group!')
+            return ConversationHandler.END
         
         print('passed')
         
@@ -160,6 +178,12 @@ async def button(update: Update, context: CallbackContext) -> None:
             bal = True
         else:
             bal = False
+
+        kishoreShibir = userdata['Registered for Kishore Shibir']
+        print(kishoreShibir, bal, userdata['Bal Group Lead'])
+        if kishoreShibir == 'Yes' and bal == True and userdata['Bal Group Lead'] == 'No':
+            await query.message.reply_text('You do not have a group for bal shibir')
+            return ConversationHandler.END
 
         names = []
 
@@ -193,6 +217,30 @@ async def button(update: Update, context: CallbackContext) -> None:
 
     elif query.data == 'transportation-info':
         await query.message.reply_text("Transportation info: ...")
+    elif query.data == 'schedule':
+        current_date = datetime.now()
+        day_diff = (current_date - EVENT_START_DATE).days
+        
+        if 0 <= day_diff < 8:
+            if day_diff == 3:  # Fourth day (0-indexed, so day_diff == 3 is the fourth day)
+                if current_date.hour >= 12:
+                    image_path = 'Assets/day4schedulebal.png'
+                else:
+                    image_path = 'Assets/day4schedulekishore.png'
+            else:
+                image_path = f'Assets/day{day_diff + 1}schedule.png'
+            print(image_path)
+            if os.path.exists(image_path):
+                with open(image_path, 'rb') as photo:
+                    await context.bot.send_photo(
+                        chat_id=query.message.chat_id,
+                        photo=photo,
+                    )
+            else:
+                logging.error('Schedule not found')
+        else:
+            logging.error('Day difference is out of the expected range.')
+
     elif query.data == 'flowmaps':
         await query.message.reply_text("Flowmaps")
     elif query.data == 'poc':
@@ -231,6 +279,8 @@ Questions about hotel, transportation, or if you need directions, etc:
         context.user_data['delayed_task'].cancel()
     if menuButton == True:
         context.user_data['delayed_task'] = asyncio.create_task(delayed_start_message(query.message.chat_id, context))
+
+    return ConversationHandler.END
 
 async def update_days_keyboard(query):
     global selected_month
@@ -515,9 +565,6 @@ def main() -> None:
     application.add_handler(conv_handler)
     application.add_handler(button_handler)
 
-    scheduler = AsyncIOScheduler()
-    scheduler.start()
-    application.bot_data['scheduler'] = scheduler
 
     application.run_polling()
 
