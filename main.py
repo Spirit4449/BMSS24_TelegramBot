@@ -35,7 +35,7 @@ MONTHS = [
 
 HOTEL_INFORMATION = {
     'Sonesta Gwinnett Place': '1775 Pleasant Hill Rd, Duluth, GA 30096',
-    'Best Western Gwinnett': '3670 Shackleford Rd, Duluth, GA 30096',
+    'Best Western Gwinnett Center': '3670 Shackleford Rd, Duluth, GA 30096',
     'Hampton Inn & Suites': '1725 Pineland Rd Duluth GA 30096'
 }
 
