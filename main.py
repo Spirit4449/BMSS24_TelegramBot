@@ -8,6 +8,7 @@ from tokens import TOKEN
 from groupImages import createGroupImage
 import pandas as pd
 from datetime import datetime, timedelta
+from menu import get_menu
 
 # Enable logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -93,7 +94,7 @@ async def send_start_message(chat_id: int, context: CallbackContext) -> None:
         [InlineKeyboardButton("Group Info", callback_data='group-info')],
         #[InlineKeyboardButton("Transportation Info", callback_data='transportation-info')],
         [InlineKeyboardButton("Schedule", callback_data='schedule')],
-        #[InlineKeyboardButton("Flowmaps", callback_data='flowmaps')],
+        [InlineKeyboardButton("Menu", callback_data='menu')],
         [InlineKeyboardButton("Point of Contact", callback_data='poc')],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -244,6 +245,14 @@ async def button(update: Update, context: CallbackContext) -> None:
                 logging.error('Schedule not found')
         else:
             logging.error('Day difference is out of the expected range.')
+
+    elif query.data == 'menu':
+        now = datetime.now()
+        user_date = now.strftime('%m/%d')
+        formatted_date = now.strftime('%d')
+        message = get_menu(formatted_date)
+
+        await query.message.reply_text(f'Menu for {user_date}\n' + message)
 
     elif query.data == 'flowmaps':
         await query.message.reply_text("Flowmaps")
