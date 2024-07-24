@@ -4,10 +4,13 @@ import asyncio
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler, ConversationHandler
-from tokens import TOKEN
-from groupImages import createGroupImage
+
 import pandas as pd
 from datetime import datetime, timedelta
+import pytz
+
+from tokens import TOKEN
+from groupImages import createGroupImage
 from menu import get_menu
 
 # Enable logging
@@ -17,7 +20,9 @@ logger = logging.getLogger(__name__)
 # Define states for the conversation handler
 ENTER_BKMS_ID = 1
 
-EVENT_START_DATE = datetime(2024, 7, 22)
+EVENT_START_DATE = 22
+
+desired_tz = pytz.timezone('America/New_York')
 
 MONTHS = [
     {"name": "January", "days": list(range(1, 32))},
@@ -171,18 +176,19 @@ async def button(update: Update, context: CallbackContext) -> None:
 """, parse_mode='MarkdownV2')
     elif query.data == 'group-info':
         groupName = userdata['Group Name']
-        print(groupName, groupName)
         if not type(groupName) == str:
             await query.message.reply_text('You are not in a group!')
             return ConversationHandler.END
-        
-        print('passed')
-        
+                
         if data[3] == 'bal-shibir':
             bal = True
-        else:
+        elif data[3] == 'kishore-shibir':
             bal = False
-
+        else:
+            await query.message.reply_text('You need to select a shibir!')
+            return ConversationHandler.END
+        
+    
         kishoreShibir = userdata['Registered for Kishore Shibir']
         print(kishoreShibir, bal, userdata['Bal Group Lead'])
         if kishoreShibir == 'Yes' and bal == True and userdata['Bal Group Lead'] == 'No':
@@ -200,11 +206,12 @@ async def button(update: Update, context: CallbackContext) -> None:
             for row in reader:
                 # Ensure the row is long enough
                 if row[5] == groupName:
+                    print(row[6], bal)
                     # Assuming User ID is in column_index 0
                     if row[6] == 'Yes' and bal == True:
-                        groupLead = row[1]
+                        groupLead = f'{row[1]}, {row[2]}'
                     elif row[7] == 'Yes' and bal == False:
-                        groupLead = row[1]
+                        groupLead = f'{row[1]}, {row[2]}'
                     names.append(f'{row[1]}, {row[2]}')  # Adjust the index if User ID is in a different column
 
             file_path = createGroupImage(names, bal, groupName, groupLead)
@@ -222,12 +229,15 @@ async def button(update: Update, context: CallbackContext) -> None:
     elif query.data == 'transportation-info':
         await query.message.reply_text("Transportation info: ...")
     elif query.data == 'schedule':
-        current_date = datetime.now()
-        day_diff = (current_date - EVENT_START_DATE).days
+        # Get the current time in UTC
+        utc_now = datetime.utcnow().replace(tzinfo=pytz.utc)
+        local_time = str(utc_now.astimezone(desired_tz))
+        local_time = local_time[8:10]
+        day_diff = int(local_time) - EVENT_START_DATE
         
         if 0 <= day_diff < 8:
             if day_diff == 3:  # Fourth day (0-indexed, so day_diff == 3 is the fourth day)
-                if current_date.hour >= 12:
+                if local_time.hour >= 12:
                     image_path = 'Assets/day4schedulebal.png'
                 else:
                     image_path = 'Assets/day4schedulekishore.png'
@@ -247,12 +257,13 @@ async def button(update: Update, context: CallbackContext) -> None:
             logging.error('Day difference is out of the expected range.')
 
     elif query.data == 'menu':
-        now = datetime.now()
-        user_date = now.strftime('%m/%d')
-        formatted_date = now.strftime('%d')
-        message = get_menu(formatted_date)
+        utc_now = datetime.utcnow().replace(tzinfo=pytz.utc)
+        local_time = str(utc_now.astimezone(desired_tz))
+        day = local_time[8:10]
+        month = local_time[5:7]
+        message = get_menu(day)
 
-        await query.message.reply_text(f'Menu for {user_date}\n' + message)
+        await query.message.reply_text(f'Menu for {month}/{day}\n' + message)
 
     elif query.data == 'flowmaps':
         await query.message.reply_text("Flowmaps")
