@@ -236,13 +236,7 @@ async def button(update: Update, context: CallbackContext) -> None:
         day_diff = int(local_time) - EVENT_START_DATE
         
         if 0 <= day_diff < 8:
-            if day_diff == 3:  # Fourth day (0-indexed, so day_diff == 3 is the fourth day)
-                if local_time.hour >= 12:
-                    image_path = 'Assets/day4schedulebal.png'
-                else:
-                    image_path = 'Assets/day4schedulekishore.png'
-            else:
-                image_path = f'Assets/day{day_diff + 1}schedule.png'
+            image_path = f'Assets/day{day_diff + 1}schedule.png'
             print(image_path)
             if os.path.exists(image_path):
                 with open(image_path, 'rb') as photo:
