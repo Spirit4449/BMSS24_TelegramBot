@@ -20,13 +20,16 @@ logger = logging.getLogger(__name__)
 # Define states for the conversation handler
 ENTER_BKMS_ID = 1
 
+# Start date of the event
 EVENT_START_DATE = 22
 
+# Time zone
 desired_tz = pytz.timezone('America/New_York')
 
+# List of months and the amount of days
 MONTHS = [
     {"name": "January", "days": list(range(1, 32))},
-    {"name": "February", "days": list(range(1, 29))},  # Simplified feor the example
+    {"name": "February", "days": list(range(1, 29))},
     {"name": "March", "days": list(range(1, 32))},
     {"name": "April", "days": list(range(1, 31))},
     {"name": "May", "days": list(range(1, 32))},
@@ -39,6 +42,7 @@ MONTHS = [
     {"name": "December", "days": list(range(1, 32))}
 ]
 
+# Hotels and their address
 HOTEL_INFORMATION = {
     'Sonesta Gwinnett Place': '1775 Pleasant Hill Rd, Duluth, GA 30096',
     'Best Western Gwinnett Center': '3670 Shackleford Rd, Duluth, GA 30096',
@@ -46,9 +50,11 @@ HOTEL_INFORMATION = {
 }
 
 # Read the Excel file
-file_path = 'Data/FullData.csv'
-df = pd.read_csv(file_path)
+data_path = 'Data/FullData.csv'
+login_path = 'Data/loginids.csv'
 
+# Read the data with pandas
+df = pd.read_csv(data_path)
 # Convert non-numeric values to NaN and drop rows with NaN in 'User ID'
 df['User ID'] = pd.to_numeric(df['User ID'], errors='coerce')  # Convert to numeric, invalid parsing will be set as NaN
 df = df.dropna(subset=['User ID'])  # Drop rows where 'User ID' is NaN
@@ -57,7 +63,7 @@ df['User ID'] = df['User ID'].astype(int)  # Convert the cleaned 'User ID' colum
 # Convert columns to lists
 bkids = df['User ID'].astype(str).tolist()
 
-
+# Get all user data function
 def get_user_data(user_id):
     try:
         user_id = int(user_id)
@@ -93,19 +99,7 @@ def get_user_data(user_id):
         }
     return None
 
-async def send_start_message(chat_id: int, context: CallbackContext) -> None:
-    keyboard = [
-        [InlineKeyboardButton("Hotel Info", callback_data='hotel-info')],
-        [InlineKeyboardButton("Group Info", callback_data='group-info')],
-        #[InlineKeyboardButton("Transportation Info", callback_data='transportation-info')],
-        [InlineKeyboardButton("Schedule", callback_data='schedule')],
-        [InlineKeyboardButton("Menu", callback_data='menu')],
-        [InlineKeyboardButton("Point of Contact", callback_data='poc')],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await context.bot.send_message(chat_id=chat_id, text='What would you like to know?', reply_markup=reply_markup)
-
-
+# Message will send when the user first uses the bot or logs out of their id
 async def send_welcome_message(update: Update, context: CallbackContext) -> None:
     user_first_name = update.message.from_user.first_name
     welcome_message = (
@@ -123,6 +117,21 @@ async def send_welcome_message(update: Update, context: CallbackContext) -> None
     else:
         logger.error('Image file not found.')
 
+# Sends the menu with all the buttons
+async def send_start_message(chat_id: int, context: CallbackContext) -> None:
+    keyboard = [
+        [InlineKeyboardButton("Hotel Info", callback_data='hotel-info')],
+        [InlineKeyboardButton("Group Info", callback_data='group-info')],
+        #[InlineKeyboardButton("Transportation Info", callback_data='transportation-info')],
+        [InlineKeyboardButton("Schedule", callback_data='schedule')],
+        [InlineKeyboardButton("Menu", callback_data='menu')],
+        [InlineKeyboardButton("Point of Contact", callback_data='poc')],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await context.bot.send_message(chat_id=chat_id, text='What would you like to know?', reply_markup=reply_markup)
+
+
+# Runs when /start is typed
 async def start(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     print(user_id)
@@ -133,13 +142,13 @@ async def start(update: Update, context: CallbackContext) -> None:
         await update.message.reply_text('Please enter your BKMS ID:')
         return ENTER_BKMS_ID
     else:
+        # If the bkid is already mapped to a user id, it sends the start message
         await send_start_message(update.message.chat_id, context)
 
+# Runs whenever a button is pressed
 async def button(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
-
-    print('button')
 
     user_first_name = query.from_user.first_name
     user_id = query.from_user.id
@@ -197,7 +206,7 @@ async def button(update: Update, context: CallbackContext) -> None:
 
         names = []
 
-        with open("Data/FullData.csv", mode='r', newline='') as file:
+        with open(data_path, mode='r', newline='') as file:
             reader = csv.reader(file)
             header = next(reader)  # Skip the header row if present
 
@@ -214,10 +223,10 @@ async def button(update: Update, context: CallbackContext) -> None:
                         groupLead = f'{row[1]}, {row[2]}'
                     names.append(f'{row[1]}, {row[2]}')  # Adjust the index if User ID is in a different column
 
-            file_path = createGroupImage(names, bal, groupName, groupLead)
+            data_path = createGroupImage(names, bal, groupName, groupLead)
             group_message = f'Group information for {name}bhai'
-            if os.path.exists(file_path):
-                with open(file_path, 'rb') as photo:
+            if os.path.exists(data_path):
+                with open(data_path, 'rb') as photo:
                     await context.bot.send_photo(
                         chat_id=query.message.chat_id,
                         photo=photo,
@@ -293,6 +302,7 @@ Shibir Hotline: \\(943\\) 300\\-7012
         await enter_birthday(month_str, day_str, query, context)
 
 
+    # Prevents excess start messages being sent whenever a user presses a button
     if 'delayed_task' in context.user_data:
         context.user_data['delayed_task'].cancel()
     if menuButton == True:
@@ -300,6 +310,12 @@ Shibir Hotline: \\(943\\) 300\\-7012
 
     return ConversationHandler.END
 
+# Part of the delay for menu buttons
+async def delayed_start_message(chat_id: int, context: CallbackContext) -> None:
+    await asyncio.sleep(2.5)
+    await send_start_message(chat_id, context)
+
+# Changes the button menu from months to days
 async def update_days_keyboard(query):
     global selected_month
 
@@ -313,10 +329,7 @@ async def update_days_keyboard(query):
     else:
         await query.message.reply_text("Please select a month first.")
 
-async def delayed_start_message(chat_id: int, context: CallbackContext) -> None:
-    await asyncio.sleep(2.5)
-    await send_start_message(chat_id, context)
-
+# Sends the birthday message with the months
 async def birthday_buttons(query):
     keyboard = [
        [InlineKeyboardButton(month["name"], callback_data=month["name"]) for month in row] for row in chunked_months(MONTHS, 3)
@@ -324,6 +337,7 @@ async def birthday_buttons(query):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.message.reply_text(text='Enter your birthday to access this information. You only have to do this once.', reply_markup=reply_markup)
 
+# Formats the months in a nice grid
 def chunked_months(months, size):
     return [months[i:i + size] for i in range(0, len(months), size)]
 
@@ -339,17 +353,16 @@ async def enter_bkms_id(update: Update, context: CallbackContext) -> int:
         await update.message.reply_text(f'BKMS ID found successfully for {name}bhai')
         await asyncio.sleep(1)
         updated_rows = []
-        with open('Data/loginids.csv', mode='r', newline='') as file:
+        with open(login_path, mode='r', newline='') as file:
             reader = csv.reader(file)
             for row in reader:
                 if row and len(row) >= 1:
                     storedbkms = row[0]
                     if storedbkms == bkms_id:
                         row[1] = user_id
-                        print('working')
                 updated_rows.append(row)
 
-        with open('Data/loginids.csv', mode='w', newline='') as file:
+        with open(login_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerows(updated_rows)
         await birthday_buttons(update)
@@ -370,7 +383,7 @@ async def enter_birthday(month, day, update: Update, context: CallbackContext) -
     month_number = month_name.zfill(2)
     day_number = day.zfill(2)
 
-    # Construct the formatted birthday
+    # Construct the formatted birthday. For example: 01/10
     birthday = f"{month_number}/{day_number}"
 
     user_id = update.from_user.id
@@ -386,10 +399,11 @@ async def enter_birthday(month, day, update: Update, context: CallbackContext) -
 
     print(systemBirthday, birthday)
 
+    # checks if system birthday is equal to the birthday the user entered
     if systemBirthday == birthday:
         await update.message.edit_text('Birthday entered correctly!')
         updated_rows = []
-        with open('Data/loginids.csv', mode='r', newline='') as file:
+        with open(login_path, mode='r', newline='') as file:
             reader = csv.reader(file)
             for row in reader:
                 if row and len(row) >= 2:
@@ -398,7 +412,7 @@ async def enter_birthday(month, day, update: Update, context: CallbackContext) -
                         row[2] = birthday
                 updated_rows.append(row)
 
-        with open('Data/loginids.csv', mode='w', newline='') as file:
+        with open(login_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerows(updated_rows)
         
@@ -419,7 +433,7 @@ async def enter_birthday(month, day, update: Update, context: CallbackContext) -
             await update.message.reply_text(text='You are registered for both bal and kishore shibir. Which shibir do you want information for?', reply_markup=reply_markup)
         elif data['Registered for Bal Shibir'] == 'Yes':
             updated_rows = []
-            with open('Data/loginids.csv', mode='r', newline='') as file:
+            with open(login_path, mode='r', newline='') as file:
                 reader = csv.reader(file)
                 for row in reader:
                     if row and len(row) >= 1:
@@ -429,7 +443,7 @@ async def enter_birthday(month, day, update: Update, context: CallbackContext) -
                             print('working')
                     updated_rows.append(row)
 
-            with open('Data/loginids.csv', mode='w', newline='') as file:
+            with open(login_path, mode='w', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerows(updated_rows)
                 await update.message.reply_text(text='Jai Swaminarayan, you are registered for bal shibir. Please use the menu below to get information for it.')
@@ -447,7 +461,7 @@ async def enter_birthday(month, day, update: Update, context: CallbackContext) -
     return ConversationHandler.END
 
 def check_existing(user_id):
-    with open('Data/loginids.csv', mode='r') as file:
+    with open(login_path, mode='r') as file:
         reader = csv.reader(file)
         for row in reader:
             if len(row) > 1:  # Check if the row has at least 2 elements
@@ -463,7 +477,7 @@ async def change_id(update: Update, context: CallbackContext) -> None:
     updated_rows = []
     
     # Read the CSV file and process each row
-    with open('Data/loginids.csv', mode='r', newline='') as file:
+    with open(login_path, mode='r', newline='') as file:
         reader = csv.reader(file)
         for row in reader:
             if len(row) > 1 and row[1] == str(user_id):
@@ -475,7 +489,7 @@ async def change_id(update: Update, context: CallbackContext) -> None:
             updated_rows.append(row)
 
     # Write the updated rows back to the CSV file
-    with open('Data/loginids.csv', mode='w', newline='') as file:
+    with open(login_path, mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerows(updated_rows)
 
@@ -489,7 +503,7 @@ async def change_shibir(update: Update, context: CallbackContext) -> None:
     updated_rows = []
     found = False
 
-    with open('Data/loginids.csv', mode='r', newline='') as file:
+    with open(login_path, mode='r', newline='') as file:
         reader = csv.reader(file)
         for row in reader:
             if row and len(row) > 1 and row[1] == str(user_id):
@@ -521,7 +535,7 @@ async def change_shibir(update: Update, context: CallbackContext) -> None:
             updated_rows.append(row)
     
     if found:
-        with open('Data/loginids.csv', mode='w', newline='') as file:
+        with open(login_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerows(updated_rows)
     else:
@@ -531,7 +545,7 @@ async def change_shibir(update: Update, context: CallbackContext) -> None:
 
 async def bal_shibir_update(bkid):
     updated_rows = []
-    with open('Data/loginids.csv', mode='r', newline='') as file:
+    with open(login_path, mode='r', newline='') as file:
         reader = csv.reader(file)
         for row in reader:
             if row and len(row) >= 1:
@@ -540,13 +554,13 @@ async def bal_shibir_update(bkid):
                     row[3] = 'bal-shibir'
             updated_rows.append(row)
 
-    with open('Data/loginids.csv', mode='w', newline='') as file:
+    with open(login_path, mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerows(updated_rows)
 
 async def kishore_shibir_update(bkid):
     updated_rows = []
-    with open('Data/loginids.csv', mode='r', newline='') as file:
+    with open(login_path, mode='r', newline='') as file:
         reader = csv.reader(file)
         for row in reader:
             if row and len(row) >= 1:
@@ -555,7 +569,7 @@ async def kishore_shibir_update(bkid):
                     row[3] = 'kishore-shibir'
             updated_rows.append(row)
 
-    with open('Data/loginids.csv', mode='w', newline='') as file:
+    with open(login_path, mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerows(updated_rows)
 
